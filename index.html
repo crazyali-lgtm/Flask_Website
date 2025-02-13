@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Printer Control Panel</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <h1>3D Printer Control Panel</h1>
+    <h2>Live Webcam Feed! this is actually running on my raspberry pi as of right now!</h2>
+    <!-- Embed the live webcam feed -->
+    <img src="/webcam" alt="Webcam Feed" width="600">
+
+
+    <!-- Add buttons for print control -->
+    <div class="button-container">
+        <button class="control-button start" id="startPrint">Start</button>
+        <button class="control-button pause">Pause</button>
+        <button class="control-button stop">Stop</button>
+    </div>
+
+    <!-- Add upload form for GCODE files -->
+    <div class="upload-container">
+        <h2>GCODE-Datei hochladen</h2>
+        <form id="uploadForm">
+            <input type="file" id="fileInput" name="file" accept=".gcode">
+            <button type="submit">Hochladen</button>
+        </form>
+    </div>
+    
+    <div class="file-select-container">
+        <h2>GCODE-Datei auswählen</h2>
+        <select id="fileDropdown">
+            <option value="" disabled selected>Wähle eine Datei</option>
+        </select>
+        <button id="selectFile">Auswählen</button>
+    </div>
+    <div class="status-container">
+        <h2>Druckstatus</h2>
+        <p>Fortschritt: <span id="progress">0%</span></p>
+        <p>Verbleibende Zeit: <span id="timeLeft">Unbekannt</span></p>
+        <p>Status: <span id="state">Nicht verbunden</span></p>
+    </div>
+    
+
+    <script>
+        // JavaScript für den Upload
+        document.getElementById("uploadForm").addEventListener("submit", function(event) {
+            event.preventDefault(); // Verhindert das Standard-Formular-Submit
+
+            const formData = new FormData();
+            const fileInput = document.getElementById("fileInput");
+            if (fileInput.files.length === 0) {
+                alert("Bitte eine Datei auswählen.");
+                return;
+            }
+
+            formData.append("file", fileInput.files[0]);
+
+            fetch("/upload", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Datei erfolgreich hochgeladen!");
+                } else {
+                    alert("Fehler: " + data.message);
+                }
+            })
+            .catch(error => {
+                alert("Es ist ein Fehler aufgetreten: " + error);
+            });
+        });
+
+        // Dateien abrufen und Dropdown-Liste aktualisieren
+        function loadFiles() {
+            fetch("/files")
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "success") {
+                        const dropdown = document.getElementById("fileDropdown");
+                        dropdown.innerHTML = '<option value="" disabled selected>Wähle eine Datei</option>';
+                        data.files.forEach(file => {
+                            const option = document.createElement("option");
+                            option.value = file;
+                            option.textContent = file;
+                            dropdown.appendChild(option);
+                        });
+                    } else {
+                        alert("Fehler beim Laden der Dateien: " + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert("Es ist ein Fehler aufgetreten: " + error);
+                });
+        }
+
+        // Datei auswählen
+        function selectFile() {
+            const selectedFile = document.getElementById("fileDropdown").value;
+            if (!selectedFile) {
+                alert("Bitte eine Datei auswählen.");
+                return;
+            }
+
+            fetch("/select", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ filename: selectedFile })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Datei ausgewählt: " + selectedFile);
+                } else {
+                    alert("Fehler: " + data.message);
+                }
+            })
+            .catch(error => {
+                alert("Es ist ein Fehler aufgetreten: " + error);
+            });
+        }
+
+        // Druck starten
+        function startPrint() {
+            const selectedFile = document.getElementById("fileDropdown").value;
+            if (!selectedFile) {
+                alert("Bitte wähle zuerst eine Datei aus der Dropdown-Liste aus.");
+                return;
+            }
+
+            fetch("/start", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Druck gestartet!");
+                } else {
+                    alert("Fehler: " + data.message);
+                }
+            })
+            .catch(error => {
+                alert("Es ist ein Fehler aufgetreten: " + error);
+            });
+        }
+
+// Druck stoppen
+// Druck stoppen
+
+function stopPrint() {
+    fetch("/stop", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            alert("Druck gestoppt!");
+            // Druckstatus zurücksetzen
+            resetStatus();
+        } else {
+            alert("Fehler beim Stoppen des Drucks: " + data.message);
+        }
+    })
+    .catch(error => {
+        alert("Es ist ein Fehler aufgetreten: " + error);
+    });
+}
+
+// Druckstatus zurücksetzen
+function resetStatus() {
+    document.getElementById("progress").textContent = "0%";
+    document.getElementById("timeLeft").textContent = "Unbekannt";
+    document.getElementById("state").textContent = "Bereit";
+}
+
+// Druck pausieren/fortsetzen
+function togglePause() {
+    fetch("/pause", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            alert("Druck pausiert/fortgesetzt!");
+        } else {
+            alert("Fehler: " + data.message);
+        }
+    })
+    .catch(error => {
+        alert("Es ist ein Fehler aufgetreten: " + error);
+    });
+}
+
+// Druckstatus abrufen
+function updateStatus() {
+    fetch("/status")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                const status = data.data;
+                document.getElementById("progress").textContent = `${status.progress.toFixed(2)}%`;
+                document.getElementById("timeLeft").textContent = status.time_left
+                    ? `${Math.floor(status.time_left / 60)} Min ${status.time_left % 60} Sek`
+                    : "Unbekannt";
+                document.getElementById("state").textContent = status.state;
+            } else {
+                document.getElementById("state").textContent = "Fehler beim Abrufen des Status";
+            }
+        })
+        .catch(error => {
+            document.getElementById("state").textContent = "Bereit zum Drucken";
+        });
+}
+
+// Status alle 5 Sekunden aktualisieren
+setInterval(updateStatus, 5000);
+
+
+// Event-Listener für Pause-Button
+document.querySelector(".pause").addEventListener("click", togglePause);
+
+// Event-Listener für Stop-Button
+        document.querySelector(".stop").addEventListener("click", stopPrint);   
+        document.getElementById("selectFile").addEventListener("click", selectFile);
+        document.getElementById("startPrint").addEventListener("click", startPrint);
+
+        // Dateien beim Laden der Seite abrufen
+        window.onload = loadFiles;
+    </script>
+</body>
+</html>
